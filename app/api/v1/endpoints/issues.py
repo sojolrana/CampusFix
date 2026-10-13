@@ -12,7 +12,7 @@ from app.core.permissions import require_roles
 from app.db.session import get_db
 from app.enums.user_role import UserRole
 from app.models.user import User
-from app.schemas.issue import IssueCreate, IssueRead, IssueStatusUpdate
+from app.schemas.issue import IssueCreate, IssueRead, IssueStatusUpdate, IssueCommentCreate
 from app.services.issue_service import get_user_issues, submit_issue
 from app.services.issue_workflow_service import (
     InvalidStatusTransitionError,
@@ -21,6 +21,16 @@ from app.services.issue_workflow_service import (
     get_visible_issue,
     update_issue_status,
 )
+from app.schemas.issue_activity import (
+    IssueCommentRead,
+    IssueStatusHistoryRead,
+)
+from app.services.issue_activity_service import (
+    create_issue_comment,
+    list_issue_comments,
+    list_issue_status_history,
+)
+
 
 
 router = APIRouter(prefix="/issues", tags=["Issues"])
@@ -128,8 +138,110 @@ async def change_issue_status(
         ) from exc
     except InvalidStatusTransitionError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 
     return IssueRead.model_validate(issue)
+
+
+@router.post(
+    "/{issue_id}/comments",
+    response_model=IssueCommentRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_issue_comment(
+    issue_id: UUID,
+    comment_data: IssueCommentCreate,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> IssueCommentRead:
+    """Add a comment to an issue the current user can access."""
+
+    try:
+        comment = await create_issue_comment(
+            session=session,
+            issue_id=issue_id,
+            author=current_user,
+            body=comment_data.body,
+        )
+    except IssueNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except IssueAccessError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    return IssueCommentRead.model_validate(comment)
+
+
+@router.get(
+    "/{issue_id}/comments",
+    response_model=list[IssueCommentRead],
+)
+async def get_issue_comments(
+    issue_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[IssueCommentRead]:
+    """List comments for an issue the current user can access."""
+
+    try:
+        comments = await list_issue_comments(
+            session=session,
+            issue_id=issue_id,
+            current_user=current_user,
+        )
+    except IssueNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except IssueAccessError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    return [
+        IssueCommentRead.model_validate(comment)
+        for comment in comments
+    ]
+
+
+@router.get(
+    "/{issue_id}/history",
+    response_model=list[IssueStatusHistoryRead],
+)
+async def get_issue_history(
+    issue_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[IssueStatusHistoryRead]:
+    """List status changes for an issue the current user can access."""
+
+    try:
+        history = await list_issue_status_history(
+            session=session,
+            issue_id=issue_id,
+            current_user=current_user,
+        )
+    except IssueNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except IssueAccessError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    return [
+        IssueStatusHistoryRead.model_validate(entry)
+        for entry in history
+    ]

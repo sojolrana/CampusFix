@@ -64,3 +64,16 @@ class IssueStatusUpdate(SchemaBase):
     """Validate a requested issue status change."""
 
     status: IssueStatus
+
+
+class IssueCommentCreate(SchemaBase):
+    """Validate the text submitted for a new issue comment."""
+
+    body: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=1,
+            max_length=3000,
+        ),
+    ]

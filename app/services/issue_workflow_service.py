@@ -10,6 +10,7 @@ from app.enums.issue_status import IssueStatus
 from app.enums.user_role import UserRole
 from app.models.issue import Issue
 from app.models.user import User
+from app.models.issue_status_history import IssueStatusHistory
 
 
 class IssueNotFoundError(Exception):
@@ -123,7 +124,7 @@ async def update_issue_status(
     new_status: IssueStatus,
     current_user: User,
 ) -> Issue:
-    """Apply a valid status transition for assigned staff or an admin."""
+    """Validate permissions and save a status change with its audit entry."""
 
     issue = await get_issue_by_id(session, issue_id)
 
@@ -145,9 +146,23 @@ async def update_issue_status(
             f"to '{new_status}'."
         )
 
-    issue.status = new_status
+    old_status = issue.status
 
-    await session.commit()
-    await session.refresh(issue)
+    history_entry = IssueStatusHistory(
+        issue_id=issue.id,
+        changed_by_id=current_user.id,
+        old_status=old_status,
+        new_status=new_status,
+    )
+
+    issue.status = new_status
+    session.add(history_entry)
+
+    try:
+        await session.commit()
+        await session.refresh(issue)
+    except Exception:
+        await session.rollback()
+        raise
 
     return issue
