@@ -93,11 +93,9 @@ The commands below assume Ubuntu and a local PostgreSQL installation.
 ### 1. Clone the repository
 
 ```bash
-git clone git@github.com:YOUR_GITHUB_USERNAME/campusfix.git
+git clone git@github.com:sojolrana/campusfix.git
 cd campusfix
 ```
-
-Replace `YOUR_GITHUB_USERNAME` with your GitHub username.
 
 ### 2. Create and activate a virtual environment
 
