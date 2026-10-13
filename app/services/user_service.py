@@ -43,3 +43,16 @@ async def register_user(
         return await user_repository.create(session, user)
     except DuplicateEmailError as error:
         raise EmailAlreadyRegisteredError from error
+
+
+async def list_users(
+    session: AsyncSession,
+    skip: int = 0,
+    limit: int = 50,
+) -> list[User]:
+    """Retrieve a paginated collection of users for administrative operations."""
+    return await user_repository.list_users(
+        session=session,
+        skip=skip,
+        limit=limit,
+    )

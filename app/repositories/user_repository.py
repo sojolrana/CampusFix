@@ -47,3 +47,19 @@ async def create(session: AsyncSession, user: User) -> User:
 async def get_by_id(session: AsyncSession, user_id: UUID) -> User | None:
     """Return the user with the given UUID, or None if no user exists."""
     return await session.get(User, user_id)
+
+async def list_users(
+    session: AsyncSession,
+    skip: int,
+    limit: int,
+) -> list[User]:
+    """Return a page of users ordered from newest to oldest."""
+    statement = (
+        select(User)
+        .order_by(User.created_at.desc(), User.id)
+        .offset(skip)
+        .limit(limit)
+    )
+
+    result = await session.scalars(statement)
+    return list(result.all())
