@@ -1,0 +1,29 @@
+
+# Python virtual environment
+/fastapi/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environment variables and secrets
+.env
+.env.*
+
+# Keep the example configuration in Git
+!.env.example
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# VS Code workspace settings
+.vscode/
+
+# Logs
+*.log
+
+# Operating system files
+.DS_Store
