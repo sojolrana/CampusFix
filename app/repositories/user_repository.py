@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from uuid import UUID
 from app.models.user import User
 
 
@@ -42,3 +43,7 @@ async def create(session: AsyncSession, user: User) -> User:
 
     await session.refresh(user)
     return user
+
+async def get_by_id(session: AsyncSession, user_id: UUID) -> User | None:
+    """Return the user with the given UUID, or None if no user exists."""
+    return await session.get(User, user_id)
