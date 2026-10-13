@@ -1,10 +1,11 @@
+
 """Pydantic schemas for creating and reading campus issues."""
 
 from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import Field, StringConstraints
+from pydantic import StringConstraints
 
 from app.enums.issue_category import IssueCategory
 from app.enums.issue_priority import IssuePriority
@@ -48,5 +49,18 @@ class IssueRead(ORMReadSchema):
     status: IssueStatus
     priority: IssuePriority
     reporter_id: UUID
+    assigned_staff_id: UUID | None
     created_at: datetime
     updated_at: datetime
+
+
+class IssueAssign(SchemaBase):
+    """Validate the staff account selected for issue assignment."""
+
+    staff_id: UUID
+
+
+class IssueStatusUpdate(SchemaBase):
+    """Validate a requested issue status change."""
+
+    status: IssueStatus

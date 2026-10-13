@@ -62,3 +62,10 @@ class Issue(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+    assigned_staff_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
