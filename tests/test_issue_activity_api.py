@@ -1,15 +1,14 @@
 
-"""Integration tests for issue comments and status history."""
+"""Integration tests for issue comments, status history, and notifications."""
 
 import asyncio
 import os
 from collections.abc import AsyncGenerator, Iterator
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -29,6 +28,7 @@ from app.main import app
 from app.models.issue import Issue
 from app.models.issue_comment import IssueComment
 from app.models.issue_status_history import IssueStatusHistory
+from app.models.notification import Notification
 from app.models.user import User
 
 
@@ -39,7 +39,9 @@ def api_context() -> Iterator[dict[str, Any]]:
     database_url = os.getenv("TEST_DATABASE_URL")
 
     if not database_url:
-        pytest.skip("Set TEST_DATABASE_URL to run issue activity integration tests.")
+        pytest.skip(
+            "Set TEST_DATABASE_URL to run issue activity integration tests."
+        )
 
     parsed_url = make_url(database_url)
 
@@ -86,7 +88,7 @@ def api_context() -> Iterator[dict[str, Any]]:
         return current_user
 
     async def seed_data() -> dict[str, Any]:
-        """Create two students, two staff accounts, an admin, and an issue."""
+        """Create test users, issues, and recipient-specific notifications."""
 
         async with session_factory() as session:
             student_one = User(
@@ -159,7 +161,29 @@ def api_context() -> Iterator[dict[str, Any]]:
             )
 
             session.add_all([issue, resolved_issue])
+            await session.flush()
+
+            student_one_notification = Notification(
+                recipient_id=student_one.id,
+                issue_id=issue.id,
+                title="Issue assigned",
+                message="Your reported issue has been assigned to staff.",
+                is_read=False,
+            )
+
+            student_two_notification = Notification(
+                recipient_id=student_two.id,
+                issue_id=None,
+                title="CampusFix update",
+                message="This notification belongs to student two.",
+                is_read=False,
+            )
+
+            session.add_all(
+                [student_one_notification, student_two_notification]
+            )
             await session.commit()
+
             await session.refresh(issue)
             await session.refresh(resolved_issue)
 
@@ -171,6 +195,8 @@ def api_context() -> Iterator[dict[str, Any]]:
                 "admin": admin,
                 "issue_id": issue.id,
                 "resolved_issue_id": resolved_issue.id,
+                "student_one_notification_id": student_one_notification.id,
+                "student_two_notification_id": student_two_notification.id,
             }
 
     try:
@@ -203,7 +229,9 @@ def api_context() -> Iterator[dict[str, Any]]:
         asyncio.run(dispose_engine())
 
 
-def test_student_can_comment_on_own_issue(api_context: dict[str, Any]) -> None:
+def test_student_can_comment_on_own_issue(
+    api_context: dict[str, Any],
+) -> None:
     """Verify that a student can create and retrieve their own issue comment."""
 
     client = api_context["client"]
@@ -361,3 +389,74 @@ def test_comment_validation_rejects_empty_body(
     )
 
     assert response.status_code == 422
+
+
+def test_notifications_are_private_to_the_recipient(
+    api_context: dict[str, Any],
+) -> None:
+    """Verify that users only receive their own notifications."""
+
+    client = api_context["client"]
+    identity = api_context["identity"]
+    student_one = api_context["student_one"]
+
+    identity["user"] = student_one
+
+    response = client.get("/api/v1/notifications")
+
+    assert response.status_code == 200
+
+    notifications = response.json()
+    notification_ids = {item["id"] for item in notifications}
+
+    assert str(api_context["student_one_notification_id"]) in notification_ids
+    assert str(api_context["student_two_notification_id"]) not in notification_ids
+
+
+def test_user_cannot_mark_another_users_notification_as_read(
+    api_context: dict[str, Any],
+) -> None:
+    """Verify that users cannot mark another user's notification as read."""
+
+    client = api_context["client"]
+    identity = api_context["identity"]
+
+    identity["user"] = api_context["student_one"]
+
+    response = client.patch(
+        f"/api/v1/notifications/"
+        f"{api_context['student_two_notification_id']}/read"
+    )
+
+    assert response.status_code == 404
+
+    # Confirm the other user's notification remains unread.
+    identity["user"] = api_context["student_two"]
+
+    own_notifications_response = client.get("/api/v1/notifications")
+
+    assert own_notifications_response.status_code == 200
+
+    own_notifications = own_notifications_response.json()
+    target_notification = next(
+        item
+        for item in own_notifications
+        if item["id"] == str(api_context["student_two_notification_id"])
+    )
+
+    assert target_notification["is_read"] is False
+
+
+def test_notifications_require_authentication(
+    api_context: dict[str, Any],
+) -> None:
+    """Verify that notification endpoints reject unauthenticated requests."""
+
+    client = api_context["client"]
+
+    # Remove the simulated authenticated-user override.
+    app.dependency_overrides.pop(get_current_user, None)
+
+    response = client.get("/api/v1/notifications")
+
+    assert response.status_code == 401
