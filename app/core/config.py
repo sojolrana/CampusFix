@@ -49,19 +49,25 @@ class Settings(BaseSettings):
     @field_validator("cors_origins")
     @classmethod
     def validate_cors_origins(cls, origins: list[str]) -> list[str]:
-        """Remove whitespace and duplicate entries from allowed origins."""
+        """Normalize origins and reject empty or malformed entries."""
         cleaned_origins = list(
-            dict.fromkeys(origin.strip() for origin in origins)
+            dict.fromkeys(origin.strip().rstrip("/") for origin in origins)
         )
 
         if any(not origin for origin in cleaned_origins):
             raise ValueError("CORS origins must not contain empty entries.")
 
+        for origin in cleaned_origins:
+            if origin != "*" and not origin.startswith(("http://", "https://")):
+                raise ValueError(
+                    "Each CORS origin must start with http:// or https://."
+                )
+
         return cleaned_origins
 
     @model_validator(mode="after")
     def validate_production_settings(self) -> "Settings":
-        """Reject debug mode and weak JWT secrets in production."""
+        """Reject unsafe debug settings, weak secrets, and wildcard CORS."""
         if self.app_env != "production":
             return self
 
@@ -83,7 +89,6 @@ class Settings(BaseSettings):
             "your_secret",
             "example_secret",
         )
-
         known_weak_secrets = {
             "changeme",
             "change-me",
@@ -93,14 +98,21 @@ class Settings(BaseSettings):
 
         if (
             normalized_secret in known_weak_secrets
-            or any(
-                marker in normalized_secret
-                for marker in placeholder_markers
-            )
+            or any(marker in normalized_secret for marker in placeholder_markers)
         ):
             raise ValueError(
                 "Replace the placeholder JWT_SECRET_KEY "
                 "with a unique random secret."
+            )
+
+        if "*" in self.cors_origins:
+            raise ValueError(
+                "Wildcard CORS origins are not allowed in production."
+            )
+
+        if any(origin.startswith("http://") for origin in self.cors_origins):
+            raise ValueError(
+                "Production CORS origins must use HTTPS."
             )
 
         return self

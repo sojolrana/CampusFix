@@ -4,23 +4,22 @@
 import logging
 import os
 
-from fastapi import FastAPI, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from starlette.responses import Response
+from starlette.middleware.base import RequestResponseEndpoint
 
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.error_handlers import register_error_handlers
 from app.db.session import engine
 from app.middleware.request_context import RequestContextMiddleware
-
-
-# Configure application logging before importing the app's components.
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO").upper(),
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
 
 
 app = FastAPI(
@@ -30,8 +29,6 @@ app = FastAPI(
     description="Campus issue reporting and resolution platform.",
 )
 
-
-"""Register browser-origin and response-header security policies."""
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -42,7 +39,10 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def add_security_headers(request, call_next):
+async def add_security_headers(
+    request: Request,
+    call_next: RequestResponseEndpoint,
+) -> Response:
     """Add baseline security headers to HTTP responses."""
     response = await call_next(request)
 
@@ -56,7 +56,6 @@ async def add_security_headers(request, call_next):
 app.add_middleware(RequestContextMiddleware)
 register_error_handlers(app)
 
-# Register API v1 routes.
 app.include_router(
     api_router,
     prefix=settings.api_v1_prefix,
