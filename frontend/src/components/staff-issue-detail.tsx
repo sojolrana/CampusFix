@@ -99,8 +99,12 @@ function responseMessage(
 /** Render assigned issue details, status management, comments, and history. */
 export function StaffIssueDetail({
   issueId,
+  backHref = "/dashboard/staff",
+  backLabel = "Back to staff dashboard",
 }: {
   issueId: string;
+  backHref?: string;
+  backLabel?: string;
 }) {
   const [issue, setIssue] = useState<Issue | null>(null);
   const [comments, setComments] = useState<IssueComment[]>([]);
@@ -316,10 +320,10 @@ export function StaffIssueDetail({
     return (
       <main className="mx-auto max-w-4xl p-8">
         <Link
-          href="/dashboard/staff"
-          className="font-medium text-blue-700 hover:underline"
+          href={backHref}
+          className="text-sm font-semibold text-blue-700 hover:underline"
         >
-          ← Back to staff dashboard
+          ← {backLabel}
         </Link>
 
         <p role="alert" className="mt-6 text-red-600">
@@ -336,10 +340,10 @@ export function StaffIssueDetail({
     <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-8">
       <div className="mx-auto max-w-4xl">
         <Link
-          href="/dashboard/staff"
+          href={backHref}
           className="text-sm font-semibold text-blue-700 hover:underline"
         >
-          ← Back to staff dashboard
+          ← {backLabel}
         </Link>
 
         <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">

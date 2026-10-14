@@ -28,6 +28,8 @@ from app.services.issue_workflow_service import (
     InvalidStatusTransitionError,
     IssueAccessError,
     IssueNotFoundError,
+    StaffNotFoundError,
+    assign_issue_to_staff,
     get_visible_issue,
     update_issue_status,
 )
@@ -139,6 +141,37 @@ async def get_issue_details(
     except IssueAccessError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    return IssueRead.model_validate(issue)
+
+
+@router.patch("/{issue_id}/assign", response_model=IssueRead)
+async def assign_issue(
+    issue_id: UUID,
+    assignment_data: IssueAssign,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[
+        User,
+        Depends(require_roles(UserRole.ADMIN)),
+    ],
+) -> IssueRead:
+    """Assign a campus issue to an active staff member as an administrator."""
+    try:
+        issue = await assign_issue_to_staff(
+            session=session,
+            issue_id=issue_id,
+            staff_id=assignment_data.staff_id,
+        )
+    except IssueNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except StaffNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
 
