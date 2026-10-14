@@ -5,6 +5,8 @@ import logging
 import os
 
 from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+
 from sqlalchemy import text
 
 from app.api.v1.router import api_router
@@ -28,7 +30,29 @@ app = FastAPI(
     description="Campus issue reporting and resolution platform.",
 )
 
-# Register middleware and custom exception handlers.
+
+"""Register browser-origin and response-header security policies."""
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+)
+
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    """Add baseline security headers to HTTP responses."""
+    response = await call_next(request)
+
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    return response
+
+
 app.add_middleware(RequestContextMiddleware)
 register_error_handlers(app)
 
