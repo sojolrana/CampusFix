@@ -8,11 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.enums.issue_category import IssueCategory
 from app.enums.issue_priority import IssuePriority
 from app.enums.issue_status import IssueStatus
+from app.enums.user_role import UserRole
 from app.models.issue import Issue
 from app.models.user import User
 from app.repositories.issue_repository import (
     create_issue,
     list_issues,
+    list_user_issues,
 )
 from app.schemas.issue import IssueCreate
 
@@ -23,7 +25,6 @@ async def submit_issue(
     issue_data: IssueCreate,
 ) -> Issue:
     """Create a new issue for the authenticated reporter."""
-
     issue = Issue(
         title=issue_data.title,
         description=issue_data.description,
@@ -37,6 +38,21 @@ async def submit_issue(
     return await create_issue(session, issue)
 
 
+async def get_user_issues(
+    session: AsyncSession,
+    reporter_id: UUID,
+    skip: int = 0,
+    limit: int = 20,
+) -> list[Issue]:
+    """Retrieve a page of issues belonging to one reporter."""
+    return await list_user_issues(
+        session=session,
+        reporter_id=reporter_id,
+        skip=skip,
+        limit=limit,
+    )
+
+
 async def get_issues(
     session: AsyncSession,
     current_user: User,
@@ -48,8 +64,7 @@ async def get_issues(
     assigned_staff_id: UUID | None = None,
     sort_order: str = "newest",
 ) -> list[Issue]:
-    """Return a filtered, paginated list visible to the current user."""
-
+    """Retrieve filtered issues visible to the authenticated user."""
     return await list_issues(
         session=session,
         current_user=current_user,

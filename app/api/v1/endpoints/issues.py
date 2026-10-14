@@ -42,7 +42,6 @@ from app.services.issue_activity_service import (
 )
 
 
-
 router = APIRouter(prefix="/issues", tags=["Issues"])
 
 
@@ -71,13 +70,17 @@ async def create_issue(
 
 
 
+
 @router.get("", response_model=list[IssueRead])
 async def list_issues(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
-    issue_status: IssueStatus | None = Query(default=None, alias="status"),
+    issue_status: IssueStatus | None = Query(
+        default=None,
+        alias="status",
+    ),
     category: IssueCategory | None = None,
     priority: IssuePriority | None = None,
     assigned_staff_id: UUID | None = None,
@@ -86,8 +89,7 @@ async def list_issues(
         Query(pattern="^(newest|oldest)$"),
     ] = "newest",
 ) -> list[IssueRead]:
-    """Return issues visible to the current user with filtering and pagination."""
-
+    """List visible issues with filtering, sorting, and pagination."""
     if (
         assigned_staff_id is not None
         and current_user.role != UserRole.ADMIN

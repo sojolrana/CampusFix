@@ -14,13 +14,34 @@ from app.models.issue import Issue
 from app.models.user import User
 
 
-async def create_issue(session: AsyncSession, issue: Issue) -> Issue:
+async def create_issue(
+    session: AsyncSession,
+    issue: Issue,
+) -> Issue:
     """Save an issue and return it with database-generated values."""
-
     session.add(issue)
     await session.commit()
     await session.refresh(issue)
     return issue
+
+
+async def list_user_issues(
+    session: AsyncSession,
+    reporter_id: UUID,
+    skip: int = 0,
+    limit: int = 20,
+) -> list[Issue]:
+    """Return a paginated list of issues reported by one user."""
+    statement = (
+        select(Issue)
+        .where(Issue.reporter_id == reporter_id)
+        .order_by(Issue.created_at.desc(), Issue.id)
+        .offset(skip)
+        .limit(limit)
+    )
+
+    result = await session.scalars(statement)
+    return list(result.all())
 
 
 async def list_issues(
@@ -34,10 +55,10 @@ async def list_issues(
     assigned_staff_id: UUID | None = None,
     sort_order: str = "newest",
 ) -> list[Issue]:
-    """Return a filtered issue page restricted to the user's permitted issues."""
-
+    """Return a filtered issue page scoped to the current user's role."""
     statement = select(Issue)
 
+    # Apply the access scope before the optional filters.
     if current_user.role == UserRole.STUDENT:
         statement = statement.where(
             Issue.reporter_id == current_user.id
