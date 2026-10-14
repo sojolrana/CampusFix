@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.core.error_handlers import register_error_handlers
 from app.db.session import engine
 from app.middleware.request_context import RequestContextMiddleware
+from app.middleware.rate_limit import RateLimitMiddleware
 
 
 app = FastAPI(
@@ -52,6 +53,7 @@ async def add_security_headers(
 
     return response
 
+app.add_middleware(RateLimitMiddleware)
 
 app.add_middleware(RequestContextMiddleware)
 register_error_handlers(app)
