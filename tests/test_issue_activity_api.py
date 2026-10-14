@@ -460,3 +460,122 @@ def test_notifications_require_authentication(
     response = client.get("/api/v1/notifications")
 
     assert response.status_code == 401
+
+
+def test_student_issue_list_contains_only_own_issues(
+    api_context: dict[str, Any],
+) -> None:
+    """Verify that students cannot list another student's issues."""
+
+    client = api_context["client"]
+    identity = api_context["identity"]
+
+    identity["user"] = api_context["student_one"]
+
+    response = client.get("/api/v1/issues")
+
+    assert response.status_code == 200
+
+    issues = response.json()
+
+    assert len(issues) == 2
+    assert all(
+        issue["reporter_id"] == str(api_context["student_one"].id)
+        for issue in issues
+    )
+
+
+def test_staff_issue_list_contains_only_assigned_issues(
+    api_context: dict[str, Any],
+) -> None:
+    """Verify that staff can list only issues assigned to them."""
+
+    client = api_context["client"]
+    identity = api_context["identity"]
+
+    identity["user"] = api_context["assigned_staff"]
+
+    response = client.get("/api/v1/issues")
+
+    assert response.status_code == 200
+
+    issues = response.json()
+
+    assert len(issues) == 2
+    assert all(
+        issue["assigned_staff_id"] == str(api_context["assigned_staff"].id)
+        for issue in issues
+    )
+
+
+def test_issue_list_supports_status_filter(
+    api_context: dict[str, Any],
+) -> None:
+    """Verify that the issue list filters results by status."""
+
+    client = api_context["client"]
+    identity = api_context["identity"]
+
+    identity["user"] = api_context["student_one"]
+
+    response = client.get("/api/v1/issues?status=submitted")
+
+    assert response.status_code == 200
+
+    issues = response.json()
+
+    assert len(issues) == 1
+    assert issues[0]["status"] == "submitted"
+
+
+def test_issue_list_supports_pagination(
+    api_context: dict[str, Any],
+) -> None:
+    """Verify that skip and limit restrict the returned issue page."""
+
+    client = api_context["client"]
+    identity = api_context["identity"]
+
+    identity["user"] = api_context["student_one"]
+
+    response = client.get("/api/v1/issues?skip=0&limit=1")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+def test_non_admin_cannot_filter_by_assigned_staff(
+    api_context: dict[str, Any],
+) -> None:
+    """Verify that only admins may request an assigned-staff filter."""
+
+    client = api_context["client"]
+    identity = api_context["identity"]
+
+    identity["user"] = api_context["student_one"]
+
+    response = client.get(
+        "/api/v1/issues",
+        params={
+            "assigned_staff_id": str(
+                api_context["assigned_staff"].id
+            )
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_issue_list_rejects_invalid_sort_order(
+    api_context: dict[str, Any],
+) -> None:
+    """Verify that unsupported sort-order values are rejected."""
+
+    client = api_context["client"]
+    identity = api_context["identity"]
+
+    identity["user"] = api_context["student_one"]
+
+    response = client.get("/api/v1/issues?sort_order=random")
+
+    assert response.status_code == 422

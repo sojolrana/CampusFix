@@ -12,8 +12,18 @@ from app.core.permissions import require_roles
 from app.db.session import get_db
 from app.enums.user_role import UserRole
 from app.models.user import User
-from app.schemas.issue import IssueCreate, IssueRead, IssueStatusUpdate, IssueCommentCreate
-from app.services.issue_service import get_user_issues, submit_issue
+from app.schemas.issue import (
+    IssueAssign,
+    IssueCommentCreate,
+    IssueCreate,
+    IssueRead,
+    IssueStatusUpdate,
+)
+from app.enums.issue_category import IssueCategory
+from app.enums.issue_priority import IssuePriority
+from app.enums.issue_status import IssueStatus
+
+from app.services.issue_service import get_issues, submit_issue
 from app.services.issue_workflow_service import (
     InvalidStatusTransitionError,
     IssueAccessError,
@@ -60,23 +70,49 @@ async def create_issue(
     return IssueRead.model_validate(issue)
 
 
+
 @router.get("", response_model=list[IssueRead])
 async def list_issues(
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    issue_status: IssueStatus | None = Query(default=None, alias="status"),
+    category: IssueCategory | None = None,
+    priority: IssuePriority | None = None,
+    assigned_staff_id: UUID | None = None,
+    sort_order: Annotated[
+        str,
+        Query(pattern="^(newest|oldest)$"),
+    ] = "newest",
 ) -> list[IssueRead]:
-    """Return a paginated list of issues reported by the current user."""
+    """Return issues visible to the current user with filtering and pagination."""
 
-    issues = await get_user_issues(
+    if (
+        assigned_staff_id is not None
+        and current_user.role != UserRole.ADMIN
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can filter by assigned staff.",
+        )
+
+    issues = await get_issues(
         session=session,
-        reporter_id=current_user.id,
+        current_user=current_user,
         skip=skip,
         limit=limit,
+        issue_status=issue_status,
+        category=category,
+        priority=priority,
+        assigned_staff_id=assigned_staff_id,
+        sort_order=sort_order,
     )
 
-    return [IssueRead.model_validate(issue) for issue in issues]
+    return [
+        IssueRead.model_validate(issue)
+        for issue in issues
+    ]
 
 
 @router.get("/{issue_id}", response_model=IssueRead)
