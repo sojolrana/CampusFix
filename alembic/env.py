@@ -17,7 +17,7 @@ from app.models.issue import Issue  # noqa: F401
 from app.models.issue_comment import IssueComment  # noqa: F401
 from app.models.issue_status_history import IssueStatusHistory  # noqa: F401
 from app.models.user import User  # noqa: F401
-
+from app.models.notification import Notification
 
 config = context.config
 

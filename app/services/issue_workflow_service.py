@@ -11,6 +11,7 @@ from app.enums.user_role import UserRole
 from app.models.issue import Issue
 from app.models.user import User
 from app.models.issue_status_history import IssueStatusHistory
+from app.services.notification_service import create_notification
 
 
 class IssueNotFoundError(Exception):
@@ -92,7 +93,7 @@ async def assign_issue_to_staff(
     issue_id: UUID,
     staff_id: UUID,
 ) -> Issue:
-    """Assign an issue to an active user whose role is STAFF."""
+    """Assign an issue to active staff and notify the assigned person."""
 
     issue = await get_issue_by_id(session, issue_id)
 
@@ -110,10 +111,24 @@ async def assign_issue_to_staff(
             "The selected active staff account was not found."
         )
 
+    previous_staff_id = issue.assigned_staff_id
     issue.assigned_staff_id = staff_member.id
 
-    await session.commit()
-    await session.refresh(issue)
+    try:
+        if previous_staff_id != staff_member.id:
+            await create_notification(
+                session=session,
+                recipient_id=staff_member.id,
+                issue_id=issue.id,
+                title="New issue assigned",
+                message=f'You have been assigned the issue "{issue.title}".',
+            )
+
+        await session.commit()
+        await session.refresh(issue)
+    except Exception:
+        await session.rollback()
+        raise
 
     return issue
 
@@ -124,7 +139,7 @@ async def update_issue_status(
     new_status: IssueStatus,
     current_user: User,
 ) -> Issue:
-    """Validate permissions and save a status change with its audit entry."""
+    """Update issue status, record history, and notify its reporter."""
 
     issue = await get_issue_by_id(session, issue_id)
 
@@ -159,6 +174,17 @@ async def update_issue_status(
     session.add(history_entry)
 
     try:
+        await create_notification(
+            session=session,
+            recipient_id=issue.reporter_id,
+            issue_id=issue.id,
+            title="Issue status updated",
+            message=(
+                f'Your issue "{issue.title}" changed from '
+                f'"{old_status.value}" to "{new_status.value}".'
+            ),
+        )
+
         await session.commit()
         await session.refresh(issue)
     except Exception:
