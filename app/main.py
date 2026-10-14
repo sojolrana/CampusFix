@@ -1,9 +1,24 @@
+
 """Create the CampusFix FastAPI application."""
 
-from fastapi import FastAPI
+import logging
+import os
+
+from fastapi import FastAPI, HTTPException, status
+from sqlalchemy import text
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.core.error_handlers import register_error_handlers
+from app.db.session import engine
+from app.middleware.request_context import RequestContextMiddleware
+
+
+# Configure application logging before importing the app's components.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 
 app = FastAPI(
@@ -13,6 +28,11 @@ app = FastAPI(
     description="Campus issue reporting and resolution platform.",
 )
 
+# Register middleware and custom exception handlers.
+app.add_middleware(RequestContextMiddleware)
+register_error_handlers(app)
+
+# Register API v1 routes.
 app.include_router(
     api_router,
     prefix=settings.api_v1_prefix,
@@ -35,4 +55,22 @@ def health_check() -> dict[str, str]:
     return {
         "status": "healthy",
         "application": settings.app_name,
+    }
+
+
+@app.get("/ready", tags=["Health"])
+async def readiness_check() -> dict[str, str]:
+    """Check whether the API can reach its PostgreSQL database."""
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The application is not ready.",
+        ) from exc
+
+    return {
+        "status": "ready",
+        "database": "connected",
     }
